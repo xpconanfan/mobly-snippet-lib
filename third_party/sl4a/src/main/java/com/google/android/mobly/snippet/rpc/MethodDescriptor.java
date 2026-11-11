@@ -91,11 +91,13 @@ public final class MethodDescriptor {
             if (i < parameters.length()) {
                 args[i] = convertParameter(parameters, i, parameterType);
             } else if (MethodDescriptor.hasDefaultValue(Arrays.asList(annotations[i]))) {
-                args[i] = MethodDescriptor.getDefaultValue(
-                        parameterType, Arrays.asList(annotations[i]));
+                args[i] =
+                        MethodDescriptor.getDefaultValue(
+                                parameterType, Arrays.asList(annotations[i]));
             } else if (MethodDescriptor.isOptional(Arrays.asList(annotations[i]))) {
-                args[i] = MethodDescriptor.getOptionalValue(
-                        parameterType, Arrays.asList(annotations[i]));
+                args[i] =
+                        MethodDescriptor.getOptionalValue(
+                                parameterType, Arrays.asList(annotations[i]));
             } else {
                 throw new RpcError("Argument " + (i + 1) + " is not present");
             }
@@ -164,8 +166,8 @@ public final class MethodDescriptor {
                 }
                 if (type == Byte[].class) {
                     return IntStream.range(0, result.length)
-                        .mapToObj(i -> result[i])
-                        .toArray(Byte[]::new);
+                            .mapToObj(i -> result[i])
+                            .toArray(Byte[]::new);
                 }
                 return result;
             } else if (type == String[].class) {
@@ -292,7 +294,7 @@ public final class MethodDescriptor {
      * Returns the default value for a parameter which has a default value.
      *
      * @param parameterType parameterType
-     * @param annotations   annotations of the parameter
+     * @param annotations annotations of the parameter
      */
     public static Object getDefaultValue(Type parameterType, Iterable<Annotation> annotations) {
         for (Annotation a : annotations) {
@@ -310,7 +312,7 @@ public final class MethodDescriptor {
      * Returns null for an optional parameter.
      *
      * @param parameterType parameterType
-     * @param annotations   annotations of the parameter
+     * @param annotations annotations of the parameter
      */
     public static Object getOptionalValue(Type parameterType, Iterable<Annotation> annotations) {
         for (Annotation a : annotations) {
@@ -372,55 +374,67 @@ public final class MethodDescriptor {
     }
 
     /**
-     * Returns the converters for {@code String}, {@code Integer}, {@code Long},
-     * and {@code Boolean}.
+     * Returns the converters for {@code String}, {@code Integer}/{@code int}, {@code Long}/{@code
+     * long}, and {@code Boolean}/{@code boolean}.
      */
     private static Map<Class<?>, TypeConverter<?>> populateConverters() {
         Map<Class<?>, TypeConverter<?>> converters = new HashMap<>();
-        converters.put(String.class, new TypeConverter<String>() {
-            @Override
-            public String convert(String value) {
-                return value;
-            }
-        });
-        converters.put(Integer.class, new TypeConverter<Integer>() {
-            @Override
-            public Integer convert(String input) {
-                try {
-                    return Integer.decode(input);
-                } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException(
-                            String.format("'%s' is not a Integer", input), e);
-                }
-            }
-        });
-        converters.put(Long.class, new TypeConverter<Long>() {
-            @Override
-            public Long convert(String input) {
-                try {
-                    return Long.decode(input);
-                } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException(
-                            String.format("'%s' is not a Long", input), e);
-                }
-            }
-        });
-        converters.put(Boolean.class, new TypeConverter<Boolean>() {
-            @Override
-            public Boolean convert(String input) {
-                if (input == null) {
-                    return null;
-                }
-                input = input.toLowerCase(Locale.ROOT);
-                if (input.equals("true")) {
-                    return Boolean.TRUE;
-                }
-                if (input.equals("false")) {
-                    return Boolean.FALSE;
-                }
-                throw new IllegalArgumentException(String.format("'%s' is not a Boolean", input));
-            }
-        });
+        converters.put(
+                String.class,
+                new TypeConverter<String>() {
+                    @Override
+                    public String convert(String value) {
+                        return value;
+                    }
+                });
+        TypeConverter<Integer> integerConverter =
+                new TypeConverter<Integer>() {
+                    @Override
+                    public Integer convert(String input) {
+                        try {
+                            return Integer.decode(input);
+                        } catch (NumberFormatException e) {
+                            throw new IllegalArgumentException(
+                                    String.format("'%s' is not a Integer", input), e);
+                        }
+                    }
+                };
+        converters.put(Integer.class, integerConverter);
+        converters.put(int.class, integerConverter);
+        TypeConverter<Long> longConverter =
+                new TypeConverter<Long>() {
+                    @Override
+                    public Long convert(String input) {
+                        try {
+                            return Long.decode(input);
+                        } catch (NumberFormatException e) {
+                            throw new IllegalArgumentException(
+                                    String.format("'%s' is not a Long", input), e);
+                        }
+                    }
+                };
+        converters.put(Long.class, longConverter);
+        converters.put(long.class, longConverter);
+        TypeConverter<Boolean> booleanConverter =
+                new TypeConverter<Boolean>() {
+                    @Override
+                    public Boolean convert(String input) {
+                        if (input == null) {
+                            return null;
+                        }
+                        input = input.toLowerCase(Locale.ROOT);
+                        if (input.equals("true")) {
+                            return Boolean.TRUE;
+                        }
+                        if (input.equals("false")) {
+                            return Boolean.FALSE;
+                        }
+                        throw new IllegalArgumentException(
+                                String.format("'%s' is not a Boolean", input));
+                    }
+                };
+        converters.put(Boolean.class, booleanConverter);
+        converters.put(boolean.class, booleanConverter);
         return converters;
     }
 }
