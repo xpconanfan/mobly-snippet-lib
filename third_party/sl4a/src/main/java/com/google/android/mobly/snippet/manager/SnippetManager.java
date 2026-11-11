@@ -37,7 +37,7 @@ import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -64,7 +64,7 @@ public class SnippetManager {
     private static SnippetManager sInstance = null;
     private boolean mShutdown = false;
 
-    private SnippetManager(Collection<Class<? extends Snippet>> classList) {
+    SnippetManager(Collection<Class<? extends Snippet>> classList) {
         // Synchronized for multiple connections on the same session. Can't use ConcurrentHashMap
         // because we have to put in a value of 'null' before the class is constructed, but
         // ConcurrentHashMap does not allow null values.
@@ -74,11 +74,17 @@ public class SnippetManager {
             mSnippets.put(receiverClass, null);
             Collection<MethodDescriptor> methodList = MethodDescriptor.collectFrom(receiverClass);
             for (MethodDescriptor m : methodList) {
-                if (knownRpcs.containsKey(m.getName())) {
-                    // We already know an RPC of the same name. We don't catch this anywhere because
-                    // this is a programming error.
-                    throw new RuntimeException(
-                            "An RPC with the name " + m.getName() + " is already known.");
+                MethodDescriptor existing = knownRpcs.get(m.getName());
+                if (existing != null) {
+                    throw new IllegalStateException(
+                            String.format(
+                                    Locale.US,
+                                    "Duplicate RPC name '%s': defined in both %s and %s. RPC"
+                                            + " method names must be unique across all Snippet"
+                                            + " classes and cannot be overloaded.",
+                                    m.getName(),
+                                    existing.describe(),
+                                    m.describe()));
                 }
                 knownRpcs.put(m.getName(), m);
             }
@@ -215,7 +221,7 @@ public class SnippetManager {
                             + "\"");
         }
         String[] snippetClassNames = snippets.split("\\s*,\\s*");
-        Set<Class<? extends Snippet>> receiverSet = new HashSet<>();
+        Set<Class<? extends Snippet>> receiverSet = new LinkedHashSet<>();
         /** Add the event snippet class which is provided within the Snippet Lib. */
         receiverSet.add(EventSnippet.class);
         /** Add the schedule RPC snippet class which is provided within the Snippet Lib. */

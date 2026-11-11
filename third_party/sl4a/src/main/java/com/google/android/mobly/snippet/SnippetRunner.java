@@ -29,6 +29,8 @@ import com.google.android.mobly.snippet.util.EmptyTestClass;
 import com.google.android.mobly.snippet.util.Log;
 import com.google.android.mobly.snippet.util.NotificationIdFactory;
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.net.SocketException;
 import java.util.Locale;
 
@@ -79,11 +81,11 @@ public class SnippetRunner extends AndroidJUnitRunner {
     private static final String ARG_ACTION = "action";
     private static final String ARG_PORT = "port";
 
-    /**
-     * Values needed to create a notification channel. This applies to versions > O (26).
-     */
+    /** Values needed to create a notification channel. This applies to versions > O (26). */
     private static final String NOTIFICATION_CHANNEL_ID = "msl_channel";
-    private static final String NOTIFICATION_CHANNEL_DESC = "Channel reserved for mobly-snippet-lib.";
+
+    private static final String NOTIFICATION_CHANNEL_DESC =
+            "Channel reserved for mobly-snippet-lib.";
     private static final CharSequence NOTIFICATION_CHANNEL_NAME = "msl";
 
     private enum Action {
@@ -141,24 +143,43 @@ public class SnippetRunner extends AndroidJUnitRunner {
     }
 
     private void startServer(int port) {
-        AndroidProxy androidProxy = new AndroidProxy(getContext());
+        AndroidProxy androidProxy;
         try {
+            androidProxy = new AndroidProxy(getContext());
             androidProxy.startLocal(port);
         } catch (SocketException e) {
+            RuntimeException startupError;
             if ("Permission denied".equals(e.getMessage())) {
-                throw new RuntimeException(
-                        "Failed to start server. No permission to create a socket. Does the *MAIN* "
-                                + "app manifest declare the INTERNET permission?",
-                        e);
+                startupError =
+                        new RuntimeException(
+                                "Failed to start server. No permission to create a socket. Does"
+                                        + " the *MAIN* app manifest declare the INTERNET"
+                                        + " permission?",
+                                e);
+            } else {
+                startupError = new RuntimeException("Failed to start server", e);
             }
-            throw new RuntimeException("Failed to start server", e);
+            reportServerStartError(startupError);
+            throw startupError;
         } catch (IOException e) {
-            throw new RuntimeException("Failed to start server", e);
+            RuntimeException startupError = new RuntimeException("Failed to start server", e);
+            reportServerStartError(startupError);
+            throw startupError;
+        } catch (RuntimeException e) {
+            reportServerStartError(e);
+            throw e;
         }
         createNotification();
         int actualPort = androidProxy.getPort();
         sendString("SNIPPET SERVING, PORT " + actualPort);
         Log.i("Snippet server started for process " + Process.myPid() + " on port " + actualPort);
+    }
+
+    private void reportServerStartError(Throwable t) {
+        Log.e("Failed to start server.", t);
+        StringWriter sw = new StringWriter();
+        t.printStackTrace(new PrintWriter(sw));
+        sendString(sw.toString().trim());
     }
 
     @SuppressWarnings("deprecation") // Depreciated calls needed for versions < O (26)
@@ -173,8 +194,11 @@ public class SnippetRunner extends AndroidJUnitRunner {
             mNotification = builder.getNotification();
         } else {
             // Create a new channel for notifications. Needed for versions >= O
-            NotificationChannel channel = new NotificationChannel(
-                    NOTIFICATION_CHANNEL_ID, NOTIFICATION_CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT);
+            NotificationChannel channel =
+                    new NotificationChannel(
+                            NOTIFICATION_CHANNEL_ID,
+                            NOTIFICATION_CHANNEL_NAME,
+                            NotificationManager.IMPORTANCE_DEFAULT);
             channel.setDescription(NOTIFICATION_CHANNEL_DESC);
             mNotificationManager.createNotificationChannel(channel);
 

@@ -31,6 +31,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -61,11 +62,17 @@ public final class MethodDescriptor {
     public static Collection<MethodDescriptor> collectFrom(Class<? extends Snippet> clazz) {
         List<MethodDescriptor> descriptors = new ArrayList<MethodDescriptor>();
         for (Method method : clazz.getMethods()) {
+            if (method.isBridge() || method.isSynthetic()) {
+                continue;
+            }
             if (method.isAnnotationPresent(Rpc.class)
                     || method.isAnnotationPresent(AsyncRpc.class)) {
                 descriptors.add(new MethodDescriptor(clazz, method));
             }
         }
+        descriptors.sort(
+                Comparator.comparing(MethodDescriptor::getName)
+                        .thenComparing(MethodDescriptor::describe));
         return descriptors;
     }
 
@@ -91,11 +98,13 @@ public final class MethodDescriptor {
             if (i < parameters.length()) {
                 args[i] = convertParameter(parameters, i, parameterType);
             } else if (MethodDescriptor.hasDefaultValue(Arrays.asList(annotations[i]))) {
-                args[i] = MethodDescriptor.getDefaultValue(
-                        parameterType, Arrays.asList(annotations[i]));
+                args[i] =
+                        MethodDescriptor.getDefaultValue(
+                                parameterType, Arrays.asList(annotations[i]));
             } else if (MethodDescriptor.isOptional(Arrays.asList(annotations[i]))) {
-                args[i] = MethodDescriptor.getOptionalValue(
-                        parameterType, Arrays.asList(annotations[i]));
+                args[i] =
+                        MethodDescriptor.getOptionalValue(
+                                parameterType, Arrays.asList(annotations[i]));
             } else {
                 throw new RpcError("Argument " + (i + 1) + " is not present");
             }
@@ -164,8 +173,8 @@ public final class MethodDescriptor {
                 }
                 if (type == Byte[].class) {
                     return IntStream.range(0, result.length)
-                        .mapToObj(i -> result[i])
-                        .toArray(Byte[]::new);
+                            .mapToObj(i -> result[i])
+                            .toArray(Byte[]::new);
                 }
                 return result;
             } else if (type == String[].class) {
@@ -247,8 +256,21 @@ public final class MethodDescriptor {
         return mMethod.isAnnotationPresent(AsyncRpc.class);
     }
 
-    Class<? extends Snippet> getSnippetClass() {
+    public Class<? extends Snippet> getSnippetClass() {
         return mClass;
+    }
+
+    /**
+     * Returns a human-readable signature including the snippet class, method name, and parameter
+     * types (for example, {@code com.example.MySnippet#myRpc(String, int)}).
+     */
+    public String describe() {
+        String className = mClass.getCanonicalName();
+        if (className == null) {
+            className = mClass.getName();
+        }
+        return String.format(
+                Locale.US, "%s#%s(%s)", className, mMethod.getName(), formatParameterTypes());
     }
 
     private String getAnnotationDescription() {
@@ -270,6 +292,17 @@ public final class MethodDescriptor {
      * @return derived help string
      */
     String getHelp() {
+        return String.format(
+                Locale.US,
+                "%s %s(%s) returns %s  // %s",
+                isAsync() ? "@AsyncRpc" : "@Rpc",
+                mMethod.getName(),
+                formatParameterTypes(),
+                mMethod.getReturnType().getSimpleName(),
+                getAnnotationDescription());
+    }
+
+    private String formatParameterTypes() {
         StringBuilder paramBuilder = new StringBuilder();
         Class<?>[] parameterTypes = mMethod.getParameterTypes();
         for (int i = 0; i < parameterTypes.length; i++) {
@@ -278,21 +311,14 @@ public final class MethodDescriptor {
             }
             paramBuilder.append(parameterTypes[i].getSimpleName());
         }
-        return String.format(
-                Locale.US,
-                "%s %s(%s) returns %s  // %s",
-                isAsync() ? "@AsyncRpc" : "@Rpc",
-                mMethod.getName(),
-                paramBuilder,
-                mMethod.getReturnType().getSimpleName(),
-                getAnnotationDescription());
+        return paramBuilder.toString();
     }
 
     /**
      * Returns the default value for a parameter which has a default value.
      *
      * @param parameterType parameterType
-     * @param annotations   annotations of the parameter
+     * @param annotations annotations of the parameter
      */
     public static Object getDefaultValue(Type parameterType, Iterable<Annotation> annotations) {
         for (Annotation a : annotations) {
@@ -310,7 +336,7 @@ public final class MethodDescriptor {
      * Returns null for an optional parameter.
      *
      * @param parameterType parameterType
-     * @param annotations   annotations of the parameter
+     * @param annotations annotations of the parameter
      */
     public static Object getOptionalValue(Type parameterType, Iterable<Annotation> annotations) {
         for (Annotation a : annotations) {
